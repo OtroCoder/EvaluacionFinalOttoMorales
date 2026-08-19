@@ -41,7 +41,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-VERSION = "V2.0.0"
+VERSION = "V2.1.0"
 
 AUTOR = {
     "nombre": "Otto Morales Gómez",
@@ -138,6 +138,26 @@ class DataAnalyzer:
         numericas = self.df.select_dtypes(include=np.number).columns.tolist()
         categoricas = [columna for columna in self.df.columns if columna not in numericas]
         return numericas, categoricas
+
+    def resumen_unknown(self, variables: Iterable[str]) -> pd.DataFrame:
+        """Resume el total de filas y la presencia de ``unknown`` por variable."""
+        total_filas = len(self.df)
+        registros = []
+
+        for variable in variables:
+            valores_normalizados = self.df[variable].astype("string").str.strip().str.casefold()
+            cantidad_unknown = int(valores_normalizados.eq("unknown").fillna(False).sum())
+            porcentaje_unknown = (cantidad_unknown / total_filas * 100) if total_filas else 0.0
+            registros.append(
+                {
+                    "Variable": variable,
+                    "Cantidad de filas": total_filas,
+                    "Valores unknown": cantidad_unknown,
+                    "% unknown": round(porcentaje_unknown, 2),
+                }
+            )
+
+        return pd.DataFrame(registros)
 
     def informacion_general(self) -> pd.DataFrame:
         """Devuelve tipo, completitud, nulos y cardinalidad por variable."""
@@ -1058,17 +1078,40 @@ def mostrar_eda() -> None:
             st.code(analyzer.captura_info(), language="text")
 
         st.markdown("---")
-        titulo_item(2, "Clasificación de variables", "Identificación mediante una función personalizada dentro de la clase DataAnalyzer.")
+        titulo_item(
+            2,
+            "Clasificación de variables",
+            "Identificación y auditoría de valores unknown mediante funciones personalizadas de DataAnalyzer.",
+        )
         col_num, col_cat = st.columns(2, gap="large")
         with col_num:
             st.metric("Variables numéricas", len(analyzer.numericas))
-            st.markdown("\n".join(f"- `{variable}`" for variable in analyzer.numericas))
+            st.dataframe(
+                analyzer.resumen_unknown(analyzer.numericas),
+                width="stretch",
+                hide_index=True,
+                column_config={
+                    "Cantidad de filas": st.column_config.NumberColumn(format="%d"),
+                    "Valores unknown": st.column_config.NumberColumn(format="%d"),
+                    "% unknown": st.column_config.NumberColumn(format="%.2f%%"),
+                },
+            )
         with col_cat:
             st.metric("Variables categóricas", len(analyzer.categoricas))
-            st.markdown("\n".join(f"- `{variable}`" for variable in analyzer.categoricas))
+            st.dataframe(
+                analyzer.resumen_unknown(analyzer.categoricas),
+                width="stretch",
+                hide_index=True,
+                column_config={
+                    "Cantidad de filas": st.column_config.NumberColumn(format="%d"),
+                    "Valores unknown": st.column_config.NumberColumn(format="%d"),
+                    "% unknown": st.column_config.NumberColumn(format="%.2f%%"),
+                },
+            )
         bloque_insight(
             f"La función clasificar_variables() identificó {len(analyzer.numericas)} variables numéricas y "
-            f"{len(analyzer.categoricas)} categóricas. Esta separación determina qué estadísticas y gráficos son válidos."
+            f"{len(analyzer.categoricas)} categóricas. Las tablas permiten distinguir los valores unknown de los "
+            "nulos reales y dimensionar su peso dentro de cada variable."
         )
 
     with tab_estadistica:
