@@ -41,7 +41,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-VERSION = "V2.3.0"
+VERSION = "V2.3.1"
 
 AUTOR = {
     "nombre": "Otto Morales Gómez",
@@ -1318,11 +1318,22 @@ def mostrar_eda() -> None:
                     "eda_distribucion_categorica",
                     "job" if "job" in analyzer.categoricas else analyzer.categoricas[0],
                 )
-            max_categorias = max(2, min(20, int(dataframe[variable_categorica].nunique(dropna=False))))
+            cantidad_categorias = int(dataframe[variable_categorica].nunique(dropna=False))
+            max_categorias = min(20, max(1, cantidad_categorias))
             with col_b:
-                top_n = slider_persistente(
-                    "Categorías a mostrar", 2, max_categorias, f"eda_top_{variable_categorica}", min(10, max_categorias), 1
-                )
+                if max_categorias <= 2:
+                    top_n = max_categorias
+                    st.metric("Categorías a mostrar", top_n)
+                    st.caption("Se muestran automáticamente todas las categorías disponibles.")
+                else:
+                    top_n = slider_persistente(
+                        "Categorías a mostrar",
+                        2,
+                        max_categorias,
+                        f"eda_top_{variable_categorica}",
+                        min(10, max_categorias),
+                        1,
+                    )
             grafico, tabla = st.columns([1.45, 1], gap="large")
             with grafico:
                 mostrar_figura(analyzer.figura_categorica(variable_categorica, top_n))
