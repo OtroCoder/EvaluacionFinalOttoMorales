@@ -41,7 +41,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-VERSION = "V2.2.0"
+VERSION = "V2.3.0"
 
 AUTOR = {
     "nombre": "Otto Morales Gómez",
@@ -209,12 +209,25 @@ class DataAnalyzer:
         """Resume media, mediana, moda, dispersión y asimetría de una variable."""
         serie = pd.to_numeric(self.df[variable], errors="coerce").dropna()
         moda = serie.mode()
+        q1 = float(serie.quantile(0.25))
+        q3 = float(serie.quantile(0.75))
+        iqr = q3 - q1
+        limite_inferior = q1 - 1.5 * iqr
+        limite_superior = q3 + 1.5 * iqr
+        mascara_atipicos = serie.lt(limite_inferior) | serie.gt(limite_superior)
+        cantidad_atipicos = int(mascara_atipicos.sum())
         return {
             "media": float(serie.mean()),
             "mediana": float(serie.median()),
             "moda": float(moda.iloc[0]) if not moda.empty else np.nan,
             "desviacion": float(serie.std()),
-            "iqr": float(serie.quantile(0.75) - serie.quantile(0.25)),
+            "q1": q1,
+            "q3": q3,
+            "iqr": iqr,
+            "limite_inferior": limite_inferior,
+            "limite_superior": limite_superior,
+            "cantidad_atipicos": cantidad_atipicos,
+            "porcentaje_atipicos": float(cantidad_atipicos / len(serie) * 100),
             "asimetria": float(serie.skew()),
         }
 
@@ -247,23 +260,64 @@ class DataAnalyzer:
 
     def figura_histograma(self, variable: str, bins: int, mostrar_kde: bool) -> plt.Figure:
         """Crea histograma y boxplot para estudiar distribución y atípicos."""
-        figura, ejes = plt.subplots(2, 1, figsize=(10, 6), gridspec_kw={"height_ratios": [4, 1]})
+        serie = pd.to_numeric(self.df[variable], errors="coerce").dropna()
+        resumen = self.resumen_numerico(variable)
+        figura, ejes = plt.subplots(2, 1, figsize=(10, 7), gridspec_kw={"height_ratios": [4, 1.35]})
         sns.histplot(
-            data=self.df,
-            x=variable,
+            x=serie,
             bins=bins,
             kde=mostrar_kde,
             color=PALETA["navy_medio"],
             edgecolor="white",
             ax=ejes[0],
         )
-        ejes[0].axvline(self.df[variable].median(), color=PALETA["naranja"], linestyle="--", label="Mediana")
+        ejes[0].axvline(
+            resumen["media"],
+            color=PALETA["verde"],
+            linewidth=2,
+            label=f"Media: {resumen['media']:.2f}",
+        )
+        ejes[0].axvline(
+            resumen["mediana"],
+            color=PALETA["naranja"],
+            linewidth=2,
+            linestyle="--",
+            label=f"Mediana: {resumen['mediana']:.2f}",
+        )
         ejes[0].set_title(f"Distribución de {variable}", fontweight="bold", color=PALETA["navy"])
         ejes[0].set_ylabel("Frecuencia")
         ejes[0].legend()
-        sns.boxplot(data=self.df, x=variable, color=PALETA["turquesa"], ax=ejes[1])
+
+        sns.boxplot(
+            x=serie,
+            color=PALETA["turquesa"],
+            flierprops={
+                "marker": "o",
+                "markerfacecolor": PALETA["rojo"],
+                "markeredgecolor": PALETA["rojo"],
+                "markersize": 4,
+                "alpha": 0.55,
+            },
+            ax=ejes[1],
+        )
+        referencias = [
+            (resumen["limite_inferior"], "Límite inferior", PALETA["rojo"], ":"),
+            (resumen["q1"], "Q1", PALETA["navy"], "--"),
+            (resumen["mediana"], "Mediana", PALETA["naranja"], "-"),
+            (resumen["q3"], "Q3", PALETA["navy"], "--"),
+            (resumen["limite_superior"], "Límite superior", PALETA["rojo"], ":"),
+        ]
+        for valor, etiqueta, color, estilo in referencias:
+            ejes[1].axvline(valor, color=color, linestyle=estilo, linewidth=1.5, label=etiqueta)
         ejes[1].set_xlabel(variable)
         ejes[1].set_ylabel("")
+        ejes[1].legend(
+            loc="upper center",
+            bbox_to_anchor=(0.5, 1.34),
+            ncol=5,
+            frameon=False,
+            fontsize=8,
+        )
         figura.tight_layout()
         return figura
 
@@ -1182,7 +1236,11 @@ def mostrar_eda() -> None:
             )
 
     with tab_univariado:
-        titulo_item(5, "Distribución de variables numéricas", "Histogramas con Matplotlib/Seaborn, boxplots e interpretación visual.")
+        titulo_item(
+            5,
+            "Distribución de variables numéricas",
+            "Histogramas, análisis de colas y detección de valores atípicos mediante Q1, Q3 y el rango intercuartílico.",
+        )
         if analyzer.numericas:
             controles_1, controles_2, controles_3 = st.columns([1.4, 1, 1])
             with controles_1:
@@ -1198,9 +1256,55 @@ def mostrar_eda() -> None:
                 mostrar_kde = checkbox_persistente("Mostrar curva KDE", "eda_mostrar_kde", True)
             mostrar_figura(analyzer.figura_histograma(variable_numerica, numero_bins, mostrar_kde))
             resumen = analyzer.resumen_numerico(variable_numerica)
+
+            q1_metrica, mediana_metrica, q3_metrica, iqr_metrica = st.columns(4)
+            q1_metrica.metric("Q1 · percentil 25", formato_numero(resumen["q1"]))
+            mediana_metrica.metric("Mediana · percentil 50", formato_numero(resumen["mediana"]))
+            q3_metrica.metric("Q3 · percentil 75", formato_numero(resumen["q3"]))
+            iqr_metrica.metric("RIC · Q3 − Q1", formato_numero(resumen["iqr"]))
+
+            limite_inf_metrica, limite_sup_metrica, atipicos_metrica = st.columns(3)
+            limite_inf_metrica.metric(
+                "Límite inferior · Q1 − 1.5×RIC",
+                formato_numero(resumen["limite_inferior"]),
+            )
+            limite_sup_metrica.metric(
+                "Límite superior · Q3 + 1.5×RIC",
+                formato_numero(resumen["limite_superior"]),
+            )
+            atipicos_metrica.metric(
+                "Valores potencialmente atípicos",
+                f"{int(resumen['cantidad_atipicos']):,}",
+                f"{resumen['porcentaje_atipicos']:.2f}% del total",
+                delta_color="off",
+            )
+
+            asimetria = resumen["asimetria"]
+            magnitud_asimetria = abs(asimetria)
+            if magnitud_asimetria <= 0.25:
+                lectura_cola = "una forma aproximadamente simétrica, sin una cola claramente dominante"
+                relacion_centro = "La cercanía entre media y mediana respalda esta lectura"
+            else:
+                intensidad = "leve" if magnitud_asimetria < 0.75 else "moderada" if magnitud_asimetria < 1.50 else "marcada"
+                if asimetria > 0:
+                    lectura_cola = f"asimetría positiva {intensidad}: la cola derecha se prolonga por valores altos menos frecuentes"
+                    relacion_centro = "La media queda desplazada hacia arriba respecto de la mediana"
+                else:
+                    lectura_cola = f"asimetría negativa {intensidad}: la cola izquierda se prolonga por valores bajos menos frecuentes"
+                    relacion_centro = "La media queda desplazada hacia abajo respecto de la mediana"
+
             bloque_insight(
-                f"En {variable_numerica}, la media es {resumen['media']:.2f}, la mediana {resumen['mediana']:.2f} "
-                f"y la asimetría {resumen['asimetria']:.2f}. El boxplot permite reconocer dispersión y valores potencialmente atípicos."
+                f"Lectura del histograma: {variable_numerica} presenta {lectura_cola}. La asimetría es "
+                f"{asimetria:.2f}, la media {resumen['media']:.2f} y la mediana {resumen['mediana']:.2f}. "
+                f"{relacion_centro}."
+            )
+            bloque_insight(
+                f"Lectura del boxplot: el 50% central de los datos está entre Q1 = {resumen['q1']:.2f} y "
+                f"Q3 = {resumen['q3']:.2f}, con un RIC de {resumen['iqr']:.2f}. La regla 1.5×RIC identifica "
+                f"{int(resumen['cantidad_atipicos']):,} observaciones ({resumen['porcentaje_atipicos']:.2f}%) "
+                f"fuera de [{resumen['limite_inferior']:.2f}, {resumen['limite_superior']:.2f}]. Son valores "
+                "potencialmente atípicos, no errores automáticos; deben revisarse en su contexto antes de decidir su tratamiento.",
+                advertencia=resumen["cantidad_atipicos"] > 0,
             )
 
         st.markdown("---")
