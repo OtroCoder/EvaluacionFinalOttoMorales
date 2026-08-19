@@ -41,7 +41,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-VERSION = "V2.1.1"
+VERSION = "V2.2.0"
 
 AUTOR = {
     "nombre": "Otto Morales Gómez",
@@ -157,7 +157,14 @@ class DataAnalyzer:
                 }
             )
 
-        return pd.DataFrame(registros)
+        return (
+            pd.DataFrame(
+                registros,
+                columns=["Variable", "Cantidad de filas", "Valores unknown", "% unknown"],
+            )
+            .sort_values("% unknown", ascending=False, kind="stable")
+            .reset_index(drop=True)
+        )
 
     def informacion_general(self) -> pd.DataFrame:
         """Devuelve tipo, completitud, nulos y cardinalidad por variable."""
@@ -1095,9 +1102,29 @@ def mostrar_eda() -> None:
             },
         )
 
+        tabla_categoricas = analyzer.resumen_unknown(analyzer.categoricas)
         st.metric("Variables categóricas", len(analyzer.categoricas))
+
+        if not tabla_categoricas.empty:
+            variables_con_unknown = int(tabla_categoricas["Valores unknown"].gt(0).sum())
+            mayor_unknown = tabla_categoricas.iloc[0]
+            bloque_insight(
+                f"Conclusión: se conservan los registros con unknown como una categoría informativa. No alteran "
+                f"las estadísticas descriptivas de las variables numéricas y eliminarlos ocasionaría pérdida de "
+                f"información; sí deben considerarse al interpretar las categóricas. {variables_con_unknown} de "
+                f"{len(analyzer.categoricas)} variables categóricas contienen unknown y {mayor_unknown['Variable']} "
+                f"presenta la mayor proporción ({mayor_unknown['% unknown']:.2f}%)."
+            )
+
+        tabla_categoricas_estilizada = tabla_categoricas.style.apply(
+            lambda fila: [
+                "color: #C2413A; font-weight: 600;" if fila["Valores unknown"] > 0 else ""
+                for _ in fila
+            ],
+            axis=1,
+        )
         st.dataframe(
-            analyzer.resumen_unknown(analyzer.categoricas),
+            tabla_categoricas_estilizada,
             width="stretch",
             hide_index=True,
             column_config={
@@ -1105,11 +1132,6 @@ def mostrar_eda() -> None:
                 "Valores unknown": st.column_config.NumberColumn(format="%d"),
                 "% unknown": st.column_config.NumberColumn(format="%.2f%%"),
             },
-        )
-        bloque_insight(
-            f"La función clasificar_variables() identificó {len(analyzer.numericas)} variables numéricas y "
-            f"{len(analyzer.categoricas)} categóricas. Las tablas permiten distinguir los valores unknown de los "
-            "nulos reales y dimensionar su peso dentro de cada variable."
         )
 
     with tab_estadistica:
