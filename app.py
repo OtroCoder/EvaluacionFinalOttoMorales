@@ -41,7 +41,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-VERSION = "V2.1.0"
+VERSION = "V2.1.1"
 
 AUTOR = {
     "nombre": "Otto Morales Gómez",
@@ -1083,31 +1083,29 @@ def mostrar_eda() -> None:
             "Clasificación de variables",
             "Identificación y auditoría de valores unknown mediante funciones personalizadas de DataAnalyzer.",
         )
-        col_num, col_cat = st.columns(2, gap="large")
-        with col_num:
-            st.metric("Variables numéricas", len(analyzer.numericas))
-            st.dataframe(
-                analyzer.resumen_unknown(analyzer.numericas),
-                width="stretch",
-                hide_index=True,
-                column_config={
-                    "Cantidad de filas": st.column_config.NumberColumn(format="%d"),
-                    "Valores unknown": st.column_config.NumberColumn(format="%d"),
-                    "% unknown": st.column_config.NumberColumn(format="%.2f%%"),
-                },
-            )
-        with col_cat:
-            st.metric("Variables categóricas", len(analyzer.categoricas))
-            st.dataframe(
-                analyzer.resumen_unknown(analyzer.categoricas),
-                width="stretch",
-                hide_index=True,
-                column_config={
-                    "Cantidad de filas": st.column_config.NumberColumn(format="%d"),
-                    "Valores unknown": st.column_config.NumberColumn(format="%d"),
-                    "% unknown": st.column_config.NumberColumn(format="%.2f%%"),
-                },
-            )
+        st.metric("Variables numéricas", len(analyzer.numericas))
+        st.dataframe(
+            analyzer.resumen_unknown(analyzer.numericas),
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "Cantidad de filas": st.column_config.NumberColumn(format="%d"),
+                "Valores unknown": st.column_config.NumberColumn(format="%d"),
+                "% unknown": st.column_config.NumberColumn(format="%.2f%%"),
+            },
+        )
+
+        st.metric("Variables categóricas", len(analyzer.categoricas))
+        st.dataframe(
+            analyzer.resumen_unknown(analyzer.categoricas),
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "Cantidad de filas": st.column_config.NumberColumn(format="%d"),
+                "Valores unknown": st.column_config.NumberColumn(format="%d"),
+                "% unknown": st.column_config.NumberColumn(format="%.2f%%"),
+            },
+        )
         bloque_insight(
             f"La función clasificar_variables() identificó {len(analyzer.numericas)} variables numéricas y "
             f"{len(analyzer.categoricas)} categóricas. Las tablas permiten distinguir los valores unknown de los "
