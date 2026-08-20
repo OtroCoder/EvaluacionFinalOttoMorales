@@ -41,7 +41,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-VERSION = "V2.4.0"
+VERSION = "V2.5.0"
 
 AUTOR = {
     "nombre": "Otto Morales Gómez",
@@ -354,7 +354,7 @@ class DataAnalyzer:
         tabla = tabla.rename(
             columns={"count": "Conteo", "mean": "Media", "median": "Mediana", "std": "Desv. estándar"}
         )
-        tabla.index.name = "Y (Resultado de Campaña)" if objetivo == "y" else objetivo
+        tabla.index.name = "Y" if objetivo == "y" else objetivo
         return tabla.round(2)
 
     def figura_numerica_vs_objetivo(self, variable: str, objetivo: str = "y") -> plt.Figure:
@@ -443,20 +443,81 @@ class DataAnalyzer:
     def figura_categorica_vs_objetivo(
         self, variable: str, objetivo: str = "y", top_n: int = 12
     ) -> plt.Figure:
-        """Visualiza la tasa de aceptación de las categorías con mayor volumen."""
+        """Compara YES y NO con barras porcentuales apiladas, ordenadas por YES."""
         tabla = self.tasa_por_grupo(variable, objetivo, top_n).sort_values("Tasa de aceptación (%)")
-        figura, eje = plt.subplots(figsize=(9, max(4, len(tabla) * 0.48)))
-        sns.barplot(
-            data=tabla,
-            x="Tasa de aceptación (%)",
-            y=variable,
-            hue=variable,
-            palette="mako",
-            legend=False,
-            ax=eje,
+        tabla["YES (%)"] = tabla["Tasa de aceptación (%)"]
+        tabla["NO (%)"] = 100 - tabla["YES (%)"]
+        posiciones = np.arange(len(tabla))
+
+        figura, eje = plt.subplots(figsize=(10, max(4, len(tabla) * 0.56)))
+        eje.barh(
+            posiciones,
+            tabla["YES (%)"],
+            color=PALETA["naranja_oscuro"],
+            height=0.68,
+            label="YES",
         )
-        eje.set_title(f"Aceptación por {variable}", fontweight="bold", color=PALETA["navy"])
+        eje.barh(
+            posiciones,
+            tabla["NO (%)"],
+            left=tabla["YES (%)"],
+            color=PALETA["navy_medio"],
+            height=0.68,
+            label="NO",
+        )
+
+        for posicion, (_, fila) in enumerate(tabla.iterrows()):
+            porcentaje_yes = float(fila["YES (%)"])
+            porcentaje_no = float(fila["NO (%)"])
+            if porcentaje_yes >= 6:
+                eje.text(
+                    porcentaje_yes / 2,
+                    posicion,
+                    f"{porcentaje_yes:.1f}%",
+                    ha="center",
+                    va="center",
+                    color="white",
+                    fontsize=8,
+                    fontweight="bold",
+                )
+            else:
+                eje.text(
+                    porcentaje_yes + 0.7,
+                    posicion,
+                    f"{porcentaje_yes:.1f}%",
+                    ha="left",
+                    va="center",
+                    color=PALETA["naranja_oscuro"],
+                    fontsize=8,
+                    fontweight="bold",
+                    bbox={"boxstyle": "round,pad=0.18", "fc": "white", "ec": "none", "alpha": 0.92},
+                )
+            if porcentaje_no >= 10:
+                eje.text(
+                    porcentaje_yes + porcentaje_no / 2,
+                    posicion,
+                    f"{porcentaje_no:.1f}%",
+                    ha="center",
+                    va="center",
+                    color="white",
+                    fontsize=8,
+                    fontweight="bold",
+                )
+
+        nombre_variable = variable[0].upper() + variable[1:]
+        eje.set_yticks(posiciones, tabla[variable].astype(str))
+        eje.invert_yaxis()
+        eje.set_xlim(0, 100)
+        eje.set_title(
+            f"YES y NO por {nombre_variable} · orden ascendente según YES",
+            fontweight="bold",
+            color=PALETA["navy"],
+        )
+        eje.set_xlabel("Distribución dentro de cada categoría (%)")
         eje.set_ylabel("")
+        eje.legend(loc="lower right", frameon=False, ncol=2)
+        eje.grid(axis="x", alpha=0.22)
+        eje.grid(axis="y", visible=False)
         figura.tight_layout()
         return figura
 
@@ -766,6 +827,8 @@ def inyectar_estilos() -> None:
         }}
         .resultado-yes {{ background: {PALETA['naranja_oscuro']}; }}
         .resultado-no {{ background: {PALETA['navy_medio']}; margin-left: 14px; }}
+        .resultado-menor {{ background: {PALETA['navy_medio']}; }}
+        .resultado-mayor {{ background: {PALETA['naranja_oscuro']}; margin-left: 14px; }}
         .nota-asociacion {{
             display: block; margin-top: 9px; color: {PALETA['gris']}; font-size: .9rem;
         }}
@@ -1460,12 +1523,16 @@ def mostrar_eda() -> None:
             st.warning("Se requiere la variable objetivo y y al menos una variable numérica.")
 
         st.markdown("---")
-        titulo_item(8, "Análisis bivariado: categórico vs categórico", "Tablas cruzadas, proporciones y tasas de aceptación por categoría.")
+        titulo_item(
+            8,
+            "Análisis bivariado: categórico vs categórico",
+            "Barras porcentuales de YES y NO por categoría, ordenadas de menor a mayor según la tasa de YES.",
+        )
         categoricas_sin_objetivo = [variable for variable in analyzer.categoricas if variable != "y"]
         if "y" in dataframe.columns and categoricas_sin_objetivo:
             predeterminadas_cat = [variable for variable in ("education", "contact") if variable in categoricas_sin_objetivo]
             variables_cat_biv = multiselect_persistente(
-                "Variables categóricas a comparar con y",
+                "Variables categóricas a comparar con Y (Resultado de Campaña)",
                 categoricas_sin_objetivo,
                 "eda_categoricas_bivariadas",
                 predeterminadas_cat or categoricas_sin_objetivo[:1],
@@ -1475,15 +1542,33 @@ def mostrar_eda() -> None:
             if not variables_cat_biv:
                 st.info("Selecciona al menos una variable categórica.")
             for variable in variables_cat_biv:
-                st.markdown(f"#### {variable} vs y")
-                grafico, tabla_cruzada = st.columns([1.45, 1], gap="large")
-                with grafico:
-                    mostrar_figura(analyzer.figura_categorica_vs_objetivo(variable, top_n=top_biv))
-                with tabla_cruzada:
-                    st.markdown("**Distribución porcentual por fila**")
-                    st.dataframe(analyzer.tabla_cruzada(variable), width="stretch")
-                    st.markdown("**Tasa y volumen**")
-                    st.dataframe(analyzer.tasa_por_grupo(variable, top_n=top_biv), width="stretch", hide_index=True)
+                nombre_variable = variable[0].upper() + variable[1:]
+                st.markdown(f"#### {nombre_variable} vs Y (Resultado de Campaña)")
+                mostrar_figura(analyzer.figura_categorica_vs_objetivo(variable, top_n=top_biv))
+
+                resumen_tasas = analyzer.tasa_por_grupo(variable, top_n=top_biv).sort_values(
+                    "Tasa de aceptación (%)"
+                )
+                if not resumen_tasas.empty:
+                    menor_tasa = resumen_tasas.iloc[0]
+                    mayor_tasa = resumen_tasas.iloc[-1]
+                    st.markdown(
+                        f"""
+                        <div class="conclusion-bivariada">
+                            <span class="resultado-etiqueta resultado-menor">MENOR YES</span>
+                            {html.escape(str(menor_tasa[variable]))}: 
+                            <strong>{menor_tasa['Tasa de aceptación (%)']:.2f}%</strong>
+                            <span class="resultado-etiqueta resultado-mayor">MAYOR YES</span>
+                            {html.escape(str(mayor_tasa[variable]))}: 
+                            <strong>{mayor_tasa['Tasa de aceptación (%)']:.2f}%</strong>
+                            <span class="nota-asociacion">
+                                Cada barra suma 100%: el segmento restante corresponde a NO. El orden facilita comparar
+                                la tasa de YES; la asociación observada no implica causalidad.
+                            </span>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
         else:
             st.warning("Se requieren variables categóricas y la variable objetivo y.")
 
