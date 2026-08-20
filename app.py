@@ -41,7 +41,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-VERSION = "V2.5.0"
+VERSION = "V2.5.1"
 
 AUTOR = {
     "nombre": "Otto Morales Gómez",
@@ -455,7 +455,7 @@ class DataAnalyzer:
             tabla["YES (%)"],
             color=PALETA["naranja_oscuro"],
             height=0.68,
-            label="YES",
+            label="YES · Aceptó la campaña",
         )
         eje.barh(
             posiciones,
@@ -463,7 +463,7 @@ class DataAnalyzer:
             left=tabla["YES (%)"],
             color=PALETA["navy_medio"],
             height=0.68,
-            label="NO",
+            label="NO · No aceptó la campaña",
         )
 
         for posicion, (_, fila) in enumerate(tabla.iterrows()):
@@ -509,13 +509,26 @@ class DataAnalyzer:
         eje.invert_yaxis()
         eje.set_xlim(0, 100)
         eje.set_title(
-            f"YES y NO por {nombre_variable} · orden ascendente según YES",
+            f"Distribución de respuestas por {nombre_variable} · orden ascendente según YES",
             fontweight="bold",
             color=PALETA["navy"],
+            pad=48,
         )
         eje.set_xlabel("Distribución dentro de cada categoría (%)")
         eje.set_ylabel("")
-        eje.legend(loc="lower right", frameon=False, ncol=2)
+        leyenda = eje.legend(
+            loc="lower center",
+            bbox_to_anchor=(0.5, 1.01),
+            ncol=2,
+            frameon=True,
+            fancybox=True,
+            framealpha=1,
+            edgecolor=PALETA["borde"],
+            fontsize=9,
+            title="Y (Resultado de Campaña)",
+            title_fontsize=9,
+        )
+        leyenda.get_title().set_fontweight("bold")
         eje.grid(axis="x", alpha=0.22)
         eje.grid(axis="y", visible=False)
         figura.tight_layout()
