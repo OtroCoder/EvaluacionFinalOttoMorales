@@ -41,7 +41,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-VERSION = "V2.6.0"
+VERSION = "V2.7.0"
 
 AUTOR = {
     "nombre": "Otto Morales Gómez",
@@ -620,6 +620,126 @@ class DataAnalyzer:
         figura.tight_layout()
         return figura
 
+    def figura_resultado_general(self, objetivo: str = "y") -> plt.Figure:
+        """Resume el volumen y porcentaje de YES y NO con etiquetas de datos."""
+        resultados = self.df[objetivo].astype(str).str.lower()
+        conteos = resultados.value_counts().reindex(["no", "yes"], fill_value=0)
+        porcentajes = conteos.div(len(self.df)).mul(100)
+        colores = [PALETA["navy_medio"], PALETA["naranja_oscuro"]]
+
+        figura, eje = plt.subplots(figsize=(8.5, 4.5))
+        barras = eje.bar(["NO", "YES"], conteos.values, color=colores, width=0.62)
+        etiquetas = [
+            f"{int(conteo):,}\n({porcentaje:.2f}%)"
+            for conteo, porcentaje in zip(conteos.values, porcentajes.values)
+        ]
+        eje.bar_label(barras, labels=etiquetas, padding=5, fontsize=10, fontweight="bold")
+        eje.set_title("Resultado general de la campaña", fontweight="bold", color=PALETA["navy"])
+        eje.set_xlabel("Y (Resultado de Campaña)")
+        eje.set_ylabel("Número de registros")
+        eje.margins(y=0.14)
+        eje.grid(axis="x", visible=False)
+        figura.tight_layout()
+        return figura
+
+    def figura_estadistico_por_resultado(
+        self,
+        variable: str,
+        estadistico: str,
+        titulo: str,
+        etiqueta_y: str,
+    ) -> plt.Figure:
+        """Compara una media o mediana numérica entre YES y NO con etiquetas."""
+        temporal = self.df[["y", variable]].copy()
+        temporal["Resultado"] = temporal["y"].astype(str).str.lower()
+        temporal[variable] = pd.to_numeric(temporal[variable], errors="coerce")
+        agrupado = temporal.groupby("Resultado")[variable]
+        valores = agrupado.median() if estadistico == "mediana" else agrupado.mean()
+        valores = valores.reindex(["no", "yes"])
+
+        figura, eje = plt.subplots(figsize=(8.5, 4.5))
+        barras = eje.bar(
+            ["NO", "YES"],
+            valores.values,
+            color=[PALETA["navy_medio"], PALETA["naranja_oscuro"]],
+            width=0.62,
+        )
+        eje.bar_label(
+            barras,
+            labels=[f"{valor:,.2f}" for valor in valores.values],
+            padding=5,
+            fontsize=10,
+            fontweight="bold",
+        )
+        eje.set_title(titulo, fontweight="bold", color=PALETA["navy"])
+        eje.set_xlabel("Y (Resultado de Campaña)")
+        eje.set_ylabel(etiqueta_y)
+        eje.margins(y=0.16)
+        eje.grid(axis="x", visible=False)
+        figura.tight_layout()
+        return figura
+
+    def figura_tasa_aceptacion_categoria(
+        self,
+        variable: str,
+        titulo: str,
+        top_n: int = 20,
+    ) -> plt.Figure:
+        """Muestra tasas de aceptación por categoría con orden y etiquetas porcentuales."""
+        tabla = self.tasa_por_grupo(variable, top_n=top_n).sort_values("Tasa de aceptación (%)")
+        figura, eje = plt.subplots(figsize=(9, max(4.2, len(tabla) * 0.7)))
+        colores = sns.color_palette("crest", n_colors=max(1, len(tabla)))
+        barras = eje.barh(
+            tabla[variable].astype(str),
+            tabla["Tasa de aceptación (%)"],
+            color=colores,
+            height=0.64,
+        )
+        maximo = max(float(tabla["Tasa de aceptación (%)"].max()), 1.0)
+        eje.set_xlim(0, maximo * 1.20)
+        eje.bar_label(
+            barras,
+            labels=[f"{valor:.2f}%" for valor in tabla["Tasa de aceptación (%)"]],
+            padding=5,
+            fontsize=9,
+            fontweight="bold",
+        )
+        eje.set_title(titulo, fontweight="bold", color=PALETA["navy"])
+        eje.set_xlabel("Tasa de aceptación YES (%)")
+        eje.set_ylabel("")
+        eje.grid(axis="y", visible=False)
+        figura.tight_layout()
+        return figura
+
+    def figura_valores_desconocidos(self) -> plt.Figure:
+        """Visualiza el porcentaje unknown y etiqueta el conteo que lo respalda."""
+        tabla = self.valores_desconocidos().sort_values("% del dataset")
+        figura, eje = plt.subplots(figsize=(9, max(4.2, len(tabla) * 0.68)))
+        barras = eje.barh(
+            tabla["Variable"],
+            tabla["% del dataset"],
+            color=PALETA["rojo"],
+            alpha=0.82,
+            height=0.62,
+        )
+        maximo = max(float(tabla["% del dataset"].max()), 1.0)
+        eje.set_xlim(0, maximo * 1.28)
+        etiquetas = [
+            f"{int(cantidad):,} · {porcentaje:.2f}%"
+            for cantidad, porcentaje in zip(tabla["Valores 'unknown'"], tabla["% del dataset"])
+        ]
+        eje.bar_label(barras, labels=etiquetas, padding=5, fontsize=9, fontweight="bold")
+        eje.set_title(
+            "Valores unknown por variable categórica",
+            fontweight="bold",
+            color=PALETA["navy"],
+        )
+        eje.set_xlabel("Porcentaje del dataset (%)")
+        eje.set_ylabel("")
+        eje.grid(axis="y", visible=False)
+        figura.tight_layout()
+        return figura
+
     def tasa_aceptacion(self, dataframe: pd.DataFrame | None = None) -> float:
         """Calcula el porcentaje de registros con resultado yes."""
         datos = self.df if dataframe is None else dataframe
@@ -1004,6 +1124,20 @@ def bloque_insight(texto: str, advertencia: bool = False) -> None:
     """Muestra una interpretación breve junto al resultado analítico."""
     clase = "advertencia-analitica" if advertencia else "insight"
     st.markdown(f'<div class="{clase}">{html.escape(texto)}</div>', unsafe_allow_html=True)
+
+
+def bloque_hallazgo(numero: int, titulo: str, texto: str) -> None:
+    """Presenta una conclusión numerada antes de su evidencia visual."""
+    st.markdown(
+        f"""
+        <div class="tarjeta" style="height:auto;margin:12px 0 10px;border-left:5px solid {PALETA['turquesa']};">
+            <span class="item-tag">Hallazgo {numero}</span>
+            <h3 style="margin:10px 0 6px;">{html.escape(titulo)}</h3>
+            <p style="margin:0;">{html.escape(texto)}</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def formato_numero(valor: float, decimales: int = 2) -> str:
@@ -1797,41 +1931,101 @@ def mostrar_eda() -> None:
             st.warning("Se requieren al menos dos variables numéricas para construir el explorador.")
 
         st.markdown("---")
-        titulo_item(10, "Hallazgos clave", "Visualización resumen e insights principales derivados del EDA.")
+        titulo_item(
+            10,
+            "Hallazgos clave",
+            "Conclusiones ordenadas con su evidencia visual inmediata y etiquetas de datos.",
+        )
+        hallazgos = generar_hallazgos(analyzer)
         if "y" in dataframe.columns:
-            conteo_resultado = dataframe["y"].astype(str).str.lower().value_counts().rename_axis("Resultado").reset_index(name="Conteo")
-            tasas_contacto = analyzer.tasa_por_grupo("contact", top_n=10) if "contact" in dataframe.columns else pd.DataFrame()
-            grafico_resultado, grafico_contacto = st.columns(2, gap="large")
-            with grafico_resultado:
-                figura, eje = plt.subplots(figsize=(7, 4.5))
-                sns.barplot(
-                    data=conteo_resultado,
-                    x="Resultado",
-                    y="Conteo",
-                    hue="Resultado",
-                    palette={"no": PALETA["navy_medio"], "yes": PALETA["naranja"]},
-                    legend=False,
-                    ax=eje,
+            posicion_hallazgo = 0
+
+            bloque_hallazgo(
+                posicion_hallazgo + 1,
+                "Nivel general de aceptación",
+                hallazgos[posicion_hallazgo],
+            )
+            mostrar_figura(analyzer.figura_resultado_general())
+            posicion_hallazgo += 1
+
+            if "duration" in dataframe.columns:
+                st.markdown("---")
+                bloque_hallazgo(
+                    posicion_hallazgo + 1,
+                    "Duración del contacto y resultado",
+                    hallazgos[posicion_hallazgo],
                 )
-                eje.set_title("Resultado general de la campaña", fontweight="bold", color=PALETA["navy"])
-                mostrar_figura(figura)
-            with grafico_contacto:
-                if not tasas_contacto.empty:
-                    figura, eje = plt.subplots(figsize=(7, 4.5))
-                    sns.barplot(
-                        data=tasas_contacto,
-                        x="contact",
-                        y="Tasa de aceptación (%)",
-                        hue="contact",
-                        palette="crest",
-                        legend=False,
-                        ax=eje,
+                mostrar_figura(
+                    analyzer.figura_estadistico_por_resultado(
+                        "duration",
+                        "mediana",
+                        "Mediana de duración según el resultado",
+                        "Duración mediana (segundos)",
                     )
-                    eje.set_title("Aceptación por canal", fontweight="bold", color=PALETA["navy"])
-                    eje.set_xlabel("Canal")
-                    mostrar_figura(figura)
-        for indice, hallazgo in enumerate(generar_hallazgos(analyzer), start=1):
-            st.markdown(f"**{indice}.** {hallazgo}")
+                )
+                posicion_hallazgo += 1
+
+            if "contact" in dataframe.columns:
+                st.markdown("---")
+                bloque_hallazgo(
+                    posicion_hallazgo + 1,
+                    "Canal de contacto y aceptación",
+                    hallazgos[posicion_hallazgo],
+                )
+                mostrar_figura(
+                    analyzer.figura_tasa_aceptacion_categoria(
+                        "contact",
+                        "Tasa de aceptación según el canal de contacto",
+                    )
+                )
+                posicion_hallazgo += 1
+
+            if "poutcome" in dataframe.columns:
+                tabla_resultado_previo = analyzer.tasa_por_grupo("poutcome", top_n=20)
+                contiene_exito = tabla_resultado_previo["poutcome"].astype(str).str.lower().eq("success").any()
+                if contiene_exito:
+                    st.markdown("---")
+                    bloque_hallazgo(
+                        posicion_hallazgo + 1,
+                        "Resultado de la campaña anterior",
+                        hallazgos[posicion_hallazgo],
+                    )
+                    mostrar_figura(
+                        analyzer.figura_tasa_aceptacion_categoria(
+                            "poutcome",
+                            "Tasa de aceptación según el resultado previo",
+                        )
+                    )
+                    posicion_hallazgo += 1
+
+            if "campaign" in dataframe.columns:
+                st.markdown("---")
+                bloque_hallazgo(
+                    posicion_hallazgo + 1,
+                    "Intensidad de contactos en la campaña",
+                    hallazgos[posicion_hallazgo],
+                )
+                mostrar_figura(
+                    analyzer.figura_estadistico_por_resultado(
+                        "campaign",
+                        "media",
+                        "Promedio de contactos según el resultado",
+                        "Promedio de contactos",
+                    )
+                )
+                posicion_hallazgo += 1
+
+            desconocidos_hallazgo = analyzer.valores_desconocidos()
+            if not desconocidos_hallazgo.empty:
+                st.markdown("---")
+                bloque_hallazgo(
+                    posicion_hallazgo + 1,
+                    "Calidad de datos: valores unknown",
+                    hallazgos[posicion_hallazgo],
+                )
+                mostrar_figura(analyzer.figura_valores_desconocidos())
+        else:
+            bloque_hallazgo(1, "Variable objetivo no disponible", hallazgos[0])
 
     pie_pagina()
 
