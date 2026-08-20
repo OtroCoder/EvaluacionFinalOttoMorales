@@ -2,13 +2,16 @@
 
 **Especialización Python for Analytics · Proyecto final de Análisis Exploratorio de Datos**
 
+**Versión de la aplicación: V2.7.1**
+
 | | |
 |---|---|
 | **Autor** | Otto Morales Gómez |
 | **Perfil** | Ingeniero y MBA |
 | **País** | Perú |
 | **Año** | 2026 |
-| **Aplicación** | Enlace pendiente de completar después del despliegue en Streamlit Community Cloud |
+| **Aplicación** | [Abrir Bank Marketing EDA](https://evaluacionfinalottomorales.streamlit.app) |
+| **Repositorio** | [OtroCoder/EvaluacionFinalOttoMorales](https://github.com/OtroCoder/EvaluacionFinalOttoMorales) |
 
 ## Descripción
 
@@ -41,19 +44,22 @@ El caso plantea que la efectividad comercial cayó del 12% al 8% durante los úl
 - Interpretaciones automáticas redactadas en español.
 - Descarga de las cinco conclusiones en formato de texto.
 - Manejo diferenciado de valores nulos y de la categoría `unknown`.
+- Detección de valores atípicos mediante Q1, Q3 y la regla de 1.5 veces el rango intercuartílico.
+- Explorador configurable de correlaciones Pearson y Spearman.
+- Hallazgos clave organizados con una evidencia visual etiquetada para cada conclusión.
 
 ## Diez ítems desarrollados
 
 1. **Información general:** dimensiones, `.info()`, tipos de datos y valores nulos.
-2. **Clasificación de variables:** identificación de variables numéricas y categóricas mediante una función personalizada.
+2. **Clasificación de variables:** identificación de variables numéricas y categóricas, con conteo y porcentaje de `unknown` por columna.
 3. **Estadísticas descriptivas:** `.describe()`, media, mediana, moda y dispersión.
 4. **Valores faltantes:** conteo, proporciones y discusión de valores `unknown`.
-5. **Distribución numérica:** histogramas, KDE y boxplots con Matplotlib y Seaborn.
+5. **Distribución numérica:** histogramas, KDE, interpretación de colas, boxplots, cuartiles, RIC y valores potencialmente atípicos.
 6. **Variables categóricas:** conteos, gráficos de barras y proporciones.
-7. **Numérico vs categórico:** comparación de `age`, `duration` u otras variables frente a `y`.
-8. **Categórico vs categórico:** tablas cruzadas y tasas de aceptación para `education`, `contact` u otras variables.
-9. **Análisis parametrizado:** filtros dinámicos con `selectbox`, `multiselect`, `slider` y `checkbox`.
-10. **Hallazgos clave:** panel resumen e insights derivados del EDA.
+7. **Numérico vs categórico:** comparación frente a `y`, con boxplots, Q1, mediana, Q3 y estadísticas por resultado de campaña.
+8. **Categórico vs categórico:** barras porcentuales apiladas de `YES` y `NO`, ordenadas por tasa de aceptación.
+9. **Análisis parametrizado:** selección dinámica de columnas, método Pearson o Spearman, mapa de calor y ranking de correlaciones.
+10. **Hallazgos clave:** seis conclusiones ordenadas, cada una acompañada por su gráfico de respaldo y etiquetas de datos.
 
 La aplicación incluye además un módulo independiente con **cinco conclusiones finales orientadas a la toma de decisiones**.
 
@@ -77,8 +83,8 @@ La aplicación incluye además un módulo independiente con **cinco conclusiones
 ### 1. Clonar el repositorio
 
 ```bash
-git clone URL_DE_TU_REPOSITORIO
-cd NOMBRE_DEL_REPOSITORIO
+git clone https://github.com/OtroCoder/EvaluacionFinalOttoMorales.git
+cd EvaluacionFinalOttoMorales
 ```
 
 ### 2. Crear y activar un entorno virtual
@@ -124,8 +130,9 @@ La aplicación se abrirá normalmente en `http://localhost:8501`.
 2. Ingresar a [Streamlit Community Cloud](https://streamlit.io/cloud).
 3. Elegir **Create app** y conectar el repositorio.
 4. Seleccionar la rama principal y definir `app.py` como archivo de inicio.
-5. Confirmar el despliegue y copiar el enlace público.
-6. Reemplazar en este README la indicación de enlace pendiente por la URL publicada.
+5. Confirmar el despliegue. Streamlit actualizará la aplicación cuando se publiquen nuevos cambios en la rama conectada.
+
+Aplicación publicada: [evaluacionfinalottomorales.streamlit.app](https://evaluacionfinalottomorales.streamlit.app)
 
 No se requieren secretos, bases de datos externas ni servicios adicionales.
 
@@ -162,10 +169,11 @@ El archivo contiene 41,188 observaciones y 21 variables:
 Con el archivo incluido en este repositorio:
 
 - La aceptación observada es aproximadamente **11.27%**: 4,640 aceptaciones de 41,188 registros.
-- El canal celular presenta una tasa de aceptación superior a la del canal telefónico, aunque la comparación debe controlarse por segmento y periodo antes de tomar decisiones.
-- Un resultado exitoso en la campaña anterior se asocia con una mayor aceptación en la campaña actual.
-- Las aceptaciones muestran una duración de contacto mayor; sin embargo, `duration` solo se conoce al finalizar la llamada y no sirve para seleccionar clientes previamente.
-- El archivo no contiene valores nulos técnicos, pero sí categorías `unknown`, especialmente en `default`.
+- La mediana de `duration` es **449 segundos** en las aceptaciones y **163.50 segundos** en los rechazos; esta variable se conoce únicamente después del contacto.
+- El canal `cellular` registra **14.74%** de aceptación, frente a **5.23%** en `telephone`.
+- Los clientes con `poutcome = success` alcanzan **65.11%** de aceptación.
+- Las aceptaciones tuvieron en promedio **2.05 contactos**, frente a **2.63** en los rechazos.
+- El archivo no contiene valores nulos técnicos, pero `default` presenta **8,597 valores `unknown`**, equivalentes al **20.87%** de los registros.
 
 Estos resultados describen asociaciones y **no demuestran causalidad**.
 
@@ -173,8 +181,11 @@ Estos resultados describen asociaciones y **no demuestran causalidad**.
 
 - `unknown` se conserva como categoría explícita para no ocultar problemas de calidad.
 - `pdays = 999` se interpreta como ausencia de contacto previo.
-- Los gráficos categóricos muestran categorías de mayor volumen para evitar paneles ilegibles.
-- El análisis bivariado presenta tanto proporciones como tamaños de grupo.
+- Los gráficos categóricos bivariados utilizan barras apiladas al 100% para comparar `YES` y `NO`, ordenadas por la tasa de `YES`.
+- Los valores potencialmente atípicos se identifican con Q1, Q3 y 1.5 veces el RIC; no se eliminan automáticamente.
+- El Ítem 9 permite seleccionar entre dos y seis columnas y comparar relaciones mediante Pearson o Spearman.
+- Pearson representa relaciones lineales; Spearman resulta más resistente a asimetrías y valores extremos.
+- Cada hallazgo del Ítem 10 se presenta junto con una visualización que respalda sus cifras.
 - Las preferencias de los controles se respaldan en claves persistentes de `st.session_state` para conservarlas al cambiar de módulo.
 
 ## Tecnologías
@@ -189,4 +200,3 @@ Estos resultados describen asociaciones y **no demuestran causalidad**.
 ---
 
 Proyecto académico desarrollado por **Otto Morales Gómez** para la **Especialización Python for Analytics**, 2026.
-

@@ -41,7 +41,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-VERSION = "V2.7.0"
+VERSION = "V2.7.1"
 
 AUTOR = {
     "nombre": "Otto Morales Gómez",
@@ -49,6 +49,7 @@ AUTOR = {
     "curso": "Especialización Python for Analytics",
     "año": "2026",
     "país": "Perú",
+    "linkedin": "https://www.linkedin.com/in/otto-morales-64835932/",
 }
 
 PALETA = {
@@ -1077,6 +1078,11 @@ def inyectar_estilos() -> None:
         .stButton > button:hover, .stDownloadButton > button:hover {{ transform: translateY(-1px); color: #FFFFFF; }}
         [data-testid="stDataFrame"] {{ border: 1px solid {PALETA['borde']}; border-radius: 12px; overflow: hidden; }}
         .pie-pagina {{ text-align: center; color: {PALETA['gris']}; font-size: .82rem; margin-top: 35px; }}
+        .enlace-linkedin {{
+            color: {PALETA['navy_medio']} !important; font-weight: 800;
+            text-decoration: none; border-bottom: 1px solid {PALETA['turquesa']};
+        }}
+        .enlace-linkedin:hover {{ color: {PALETA['naranja_oscuro']} !important; }}
 
         @media (max-width: 760px) {{
             .hero {{ padding: 20px; align-items: flex-start; }}
@@ -1154,8 +1160,11 @@ def cambiar_pagina(etiqueta: str) -> None:
 
 def pie_pagina() -> None:
     """Añade autoría y alcance al final de cada módulo."""
+    linkedin_seguro = html.escape(AUTOR["linkedin"], quote=True)
     st.markdown(
-        f'<div class="pie-pagina">{AUTOR["nombre"]} · {AUTOR["curso"]} · {AUTOR["país"]} · {AUTOR["año"]}</div>',
+        f'<div class="pie-pagina">{AUTOR["nombre"]} · {AUTOR["curso"]} · {AUTOR["país"]} · '
+        f'{AUTOR["año"]} · <a class="enlace-linkedin" href="{linkedin_seguro}" target="_blank" '
+        'rel="noopener noreferrer">LinkedIn ↗</a></div>',
         unsafe_allow_html=True,
     )
 
@@ -1274,6 +1283,7 @@ def generar_conclusiones(analyzer: DataAnalyzer) -> list[str]:
 
 def mostrar_home() -> None:
     """Presenta el proyecto sin ejecutar ningún análisis."""
+    linkedin_seguro = html.escape(AUTOR["linkedin"], quote=True)
     encabezado_hero(
         "Proyecto final · EDA",
         "Bank Marketing: análisis exploratorio para decisiones comerciales",
@@ -1292,6 +1302,7 @@ def mostrar_home() -> None:
               <p><b>Curso:</b> {AUTOR['curso']}</p>
               <p><b>País:</b> {AUTOR['país']} 🇵🇪</p>
               <p><b>Año:</b> {AUTOR['año']}</p>
+              <p><b>LinkedIn:</b> <a class="enlace-linkedin" href="{linkedin_seguro}" target="_blank" rel="noopener noreferrer">Ver perfil profesional ↗</a></p>
             </div>
             """,
             unsafe_allow_html=True,
