@@ -41,7 +41,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-VERSION = "V2.3.1"
+VERSION = "V2.4.0"
 
 AUTOR = {
     "nombre": "Otto Morales Gómez",
@@ -354,24 +354,74 @@ class DataAnalyzer:
         tabla = tabla.rename(
             columns={"count": "Conteo", "mean": "Media", "median": "Mediana", "std": "Desv. estándar"}
         )
+        tabla.index.name = "Y (Resultado de Campaña)" if objetivo == "y" else objetivo
         return tabla.round(2)
 
     def figura_numerica_vs_objetivo(self, variable: str, objetivo: str = "y") -> plt.Figure:
         """Compara una variable numérica entre categorías de la variable objetivo."""
+        nombre_variable = variable[0].upper() + variable[1:]
+        categorias_presentes = self.df[objetivo].dropna().astype(str).unique().tolist()
+        orden = [categoria for categoria in ("no", "yes") if categoria in categorias_presentes]
+        orden.extend(categoria for categoria in categorias_presentes if categoria not in orden)
         figura, eje = plt.subplots(figsize=(8, 4.8))
         sns.boxplot(
             data=self.df,
             x=objetivo,
             y=variable,
             hue=objetivo,
+            order=orden,
             palette={"no": PALETA["navy_medio"], "yes": PALETA["naranja"]},
             legend=False,
             showfliers=False,
             ax=eje,
         )
-        eje.set_title(f"{variable} según el resultado {objetivo}", fontweight="bold", color=PALETA["navy"])
-        eje.set_xlabel("Resultado de la campaña")
-        eje.set_ylabel(variable)
+
+        for posicion, categoria in enumerate(orden):
+            serie_grupo = pd.to_numeric(
+                self.df.loc[self.df[objetivo].astype(str).eq(categoria), variable],
+                errors="coerce",
+            ).dropna()
+            if serie_grupo.empty:
+                continue
+            cuartiles = {
+                "Q1": float(serie_grupo.quantile(0.25)),
+                "Mediana": float(serie_grupo.median()),
+                "Q3": float(serie_grupo.quantile(0.75)),
+            }
+            color_grupo = PALETA["navy_medio"] if categoria == "no" else PALETA["naranja_oscuro"]
+            desplazamiento = -12 if posicion == 0 else 12
+            alineacion = "right" if posicion == 0 else "left"
+            for etiqueta, valor in cuartiles.items():
+                eje.scatter(
+                    posicion,
+                    valor,
+                    s=28,
+                    facecolor=PALETA["blanco"],
+                    edgecolor=color_grupo,
+                    linewidth=1.4,
+                    zorder=5,
+                )
+                eje.annotate(
+                    f"{etiqueta}: {valor:.2f}",
+                    xy=(posicion, valor),
+                    xytext=(desplazamiento, 0),
+                    textcoords="offset points",
+                    ha=alineacion,
+                    va="center",
+                    fontsize=8,
+                    fontweight="bold",
+                    color=color_grupo,
+                    bbox={"boxstyle": "round,pad=0.25", "fc": "white", "ec": color_grupo, "alpha": 0.92},
+                    zorder=6,
+                )
+
+        eje.set_title(
+            f"{nombre_variable} según Y (Resultado de Campaña)",
+            fontweight="bold",
+            color=PALETA["navy"],
+        )
+        eje.set_xlabel("Y (Resultado de Campaña)")
+        eje.set_ylabel(nombre_variable)
         figura.tight_layout()
         return figura
 
@@ -703,6 +753,21 @@ def inyectar_estilos() -> None:
         .advertencia-analitica {{
             border-left: 5px solid {PALETA['naranja']}; background: #FFF8F0;
             border-radius: 0 12px 12px 0; padding: 12px 16px; margin: 10px 0;
+        }}
+        .conclusion-bivariada {{
+            border-left: 5px solid {PALETA['turquesa']}; background: #FFFFFF;
+            border-radius: 0 12px 12px 0; padding: 14px 17px; margin: 10px 0 22px;
+            box-shadow: 0 2px 10px rgba(9,44,77,.055); color: {PALETA['texto']};
+        }}
+        .resultado-etiqueta {{
+            display: inline-block; border-radius: 999px; padding: 3px 10px;
+            margin: 2px 5px 2px 0; color: #FFFFFF !important;
+            font-size: .78rem; font-weight: 850; letter-spacing: .04em;
+        }}
+        .resultado-yes {{ background: {PALETA['naranja_oscuro']}; }}
+        .resultado-no {{ background: {PALETA['navy_medio']}; margin-left: 14px; }}
+        .nota-asociacion {{
+            display: block; margin-top: 9px; color: {PALETA['gris']}; font-size: .9rem;
         }}
         .paso {{
             background: #FFFFFF; border: 1px solid {PALETA['borde']}; border-radius: 14px;
@@ -1346,11 +1411,15 @@ def mostrar_eda() -> None:
             )
 
     with tab_bivariado:
-        titulo_item(7, "Análisis bivariado: numérico vs categórico", "Comparación de variables numéricas entre los resultados yes y no.")
+        titulo_item(
+            7,
+            "Análisis bivariado: numérico vs categórico",
+            "Comparación de variables numéricas según Y (Resultado de Campaña): YES frente a NO.",
+        )
         if "y" in dataframe.columns and analyzer.numericas:
             predeterminadas = [variable for variable in ("age", "duration") if variable in analyzer.numericas]
             variables_num_biv = multiselect_persistente(
-                "Variables numéricas a comparar con y",
+                "Variables numéricas a comparar con Y (Resultado de Campaña)",
                 analyzer.numericas,
                 "eda_numericas_bivariadas",
                 predeterminadas or analyzer.numericas[:1],
@@ -1359,17 +1428,33 @@ def mostrar_eda() -> None:
             if not variables_num_biv:
                 st.info("Selecciona al menos una variable numérica.")
             for variable in variables_num_biv:
-                st.markdown(f"#### {variable} vs y")
+                nombre_variable = variable[0].upper() + variable[1:]
+                st.markdown(f"#### {nombre_variable} vs Y (Resultado de Campaña)")
                 grafico, resumen_grupos = st.columns([1.5, 1], gap="large")
                 with grafico:
                     mostrar_figura(analyzer.figura_numerica_vs_objetivo(variable))
                 with resumen_grupos:
+                    st.markdown(f"##### Estadísticas descriptivas de {nombre_variable}")
+                    st.caption(
+                        f"El conteo, la media, la mediana y la desviación estándar corresponden a {nombre_variable}, "
+                        "separados por el resultado de la campaña."
+                    )
                     st.dataframe(analyzer.resumen_por_objetivo(variable), width="stretch")
                 tabla = analyzer.resumen_por_objetivo(variable)
                 if "yes" in tabla.index and "no" in tabla.index:
-                    bloque_insight(
-                        f"La mediana de {variable} es {tabla.loc['yes', 'Mediana']:.2f} para yes y "
-                        f"{tabla.loc['no', 'Mediana']:.2f} para no. La comparación describe asociación, no causalidad."
+                    st.markdown(
+                        f"""
+                        <div class="conclusion-bivariada">
+                            <span class="resultado-etiqueta resultado-yes">YES</span>
+                            Mediana de {html.escape(nombre_variable)}: <strong>{tabla.loc['yes', 'Mediana']:.2f}</strong>
+                            <span class="resultado-etiqueta resultado-no">NO</span>
+                            Mediana de {html.escape(nombre_variable)}: <strong>{tabla.loc['no', 'Mediana']:.2f}</strong>
+                            <span class="nota-asociacion">
+                                La comparación describe una asociación entre variables, no una relación de causalidad.
+                            </span>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
                     )
         else:
             st.warning("Se requiere la variable objetivo y y al menos una variable numérica.")
