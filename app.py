@@ -41,7 +41,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-VERSION = "V2.5.1"
+VERSION = "V2.6.0"
 
 AUTOR = {
     "nombre": "Otto Morales Gómez",
@@ -531,6 +531,92 @@ class DataAnalyzer:
         leyenda.get_title().set_fontweight("bold")
         eje.grid(axis="x", alpha=0.22)
         eje.grid(axis="y", visible=False)
+        figura.tight_layout()
+        return figura
+
+    def matriz_correlacion(self, variables: Iterable[str], metodo: str) -> pd.DataFrame:
+        """Calcula la matriz de correlación para las columnas numéricas elegidas."""
+        columnas = list(variables)
+        datos_numericos = self.df[columnas].apply(pd.to_numeric, errors="coerce")
+        return datos_numericos.corr(method=metodo)
+
+    def figura_matriz_correlacion(self, matriz: pd.DataFrame, metodo: str) -> plt.Figure:
+        """Construye un mapa de calor anotado para la matriz de correlación."""
+        nombre_metodo = "Spearman" if metodo == "spearman" else "Pearson"
+        lado = max(5.2, len(matriz) * 0.88)
+        figura, eje = plt.subplots(figsize=(lado, lado * 0.82))
+        sns.heatmap(
+            matriz,
+            annot=True,
+            fmt=".2f",
+            cmap="vlag",
+            vmin=-1,
+            vmax=1,
+            center=0,
+            linewidths=0.7,
+            linecolor="white",
+            square=True,
+            cbar_kws={"label": f"Coeficiente de {nombre_metodo}", "shrink": 0.82},
+            ax=eje,
+        )
+        eje.set_title(
+            f"Mapa de correlaciones · {nombre_metodo}",
+            fontweight="bold",
+            color=PALETA["navy"],
+            pad=14,
+        )
+        eje.tick_params(axis="x", labelrotation=35)
+        eje.tick_params(axis="y", labelrotation=0)
+        figura.tight_layout()
+        return figura
+
+    def figura_ranking_correlaciones(self, matriz: pd.DataFrame, variable_foco: str) -> plt.Figure:
+        """Ordena las correlaciones de una variable principal, excluyendo el autocálculo."""
+        correlaciones = matriz[variable_foco].drop(labels=[variable_foco]).dropna().sort_values()
+        figura, eje = plt.subplots(figsize=(8, max(4.2, len(correlaciones) * 0.72)))
+
+        if correlaciones.empty:
+            eje.text(
+                0.5,
+                0.5,
+                "No existen correlaciones calculables para esta selección.",
+                ha="center",
+                va="center",
+                transform=eje.transAxes,
+                color=PALETA["gris"],
+            )
+            eje.set_axis_off()
+            figura.tight_layout()
+            return figura
+
+        colores = [PALETA["rojo"] if valor < 0 else PALETA["turquesa"] for valor in correlaciones]
+        barras = eje.barh(correlaciones.index, correlaciones.values, color=colores, height=0.62)
+        eje.axvline(0, color=PALETA["navy"], linewidth=1)
+        eje.set_xlim(-1, 1)
+        eje.set_xlabel("Coeficiente de correlación")
+        eje.set_ylabel("")
+        eje.set_title(
+            f"Relaciones con {variable_foco}",
+            fontweight="bold",
+            color=PALETA["navy"],
+            pad=12,
+        )
+        eje.grid(axis="x", alpha=0.2)
+        eje.grid(axis="y", visible=False)
+
+        for barra, valor in zip(barras, correlaciones.values):
+            desplazamiento = 0.025 if valor >= 0 else -0.025
+            eje.text(
+                valor + desplazamiento,
+                barra.get_y() + barra.get_height() / 2,
+                f"{valor:+.2f}",
+                ha="left" if valor >= 0 else "right",
+                va="center",
+                fontsize=9,
+                fontweight="bold",
+                color=PALETA["texto"],
+            )
+
         figura.tight_layout()
         return figura
 
@@ -1586,92 +1672,129 @@ def mostrar_eda() -> None:
             st.warning("Se requieren variables categóricas y la variable objetivo y.")
 
     with tab_decisiones:
-        titulo_item(9, "Análisis basado en parámetros seleccionados", "Filtros y análisis dinámico mediante selectbox, multiselect, slider y checkbox.")
-        datos_filtrados = dataframe.copy()
-        filtro_1, filtro_2 = st.columns(2, gap="large")
+        titulo_item(
+            9,
+            "Explorador dinámico de relaciones numéricas",
+            "Análisis configurable mediante multiselect y selectbox según las columnas elegidas por el usuario.",
+        )
 
-        with filtro_1:
-            st.markdown("#### Filtro numérico")
-            variable_filtro_num = selectbox_persistente(
-                "Variable para rango",
-                analyzer.numericas,
-                "eda_filtro_numerico",
-                "age" if "age" in analyzer.numericas else analyzer.numericas[0],
-            )
-            serie_num = pd.to_numeric(dataframe[variable_filtro_num], errors="coerce").dropna()
-            minimo_original = float(serie_num.min())
-            maximo_original = float(serie_num.max())
-            es_entero = pd.api.types.is_integer_dtype(dataframe[variable_filtro_num])
-            minimo_slider = int(minimo_original) if es_entero else float(minimo_original)
-            maximo_slider = int(maximo_original) if es_entero else float(maximo_original)
-            paso = 1 if es_entero else max((maximo_slider - minimo_slider) / 100, 0.01)
-            rango = slider_persistente(
-                f"Rango de {variable_filtro_num}",
-                minimo_slider,
-                maximo_slider,
-                f"eda_rango_{variable_filtro_num}",
-                (minimo_slider, maximo_slider),
-                paso,
-            )
-            datos_filtrados = datos_filtrados[
-                pd.to_numeric(datos_filtrados[variable_filtro_num], errors="coerce").between(rango[0], rango[1])
-            ]
-
-        with filtro_2:
-            st.markdown("#### Filtro categórico")
-            categorias_filtrables = [variable for variable in analyzer.categoricas if variable != "y"]
-            variable_filtro_cat = selectbox_persistente(
-                "Variable para categorías",
-                categorias_filtrables,
-                "eda_filtro_categorico",
-                "job" if "job" in categorias_filtrables else categorias_filtrables[0],
-            )
-            opciones_categoria = sorted(dataframe[variable_filtro_cat].dropna().astype(str).unique().tolist())
-            categorias_elegidas = multiselect_persistente(
-                f"Valores de {variable_filtro_cat}",
-                opciones_categoria,
-                f"eda_valores_{variable_filtro_cat}",
-                opciones_categoria,
-                ayuda="Deja seleccionadas las categorías que deseas conservar.",
-            )
-            if categorias_elegidas:
-                datos_filtrados = datos_filtrados[
-                    datos_filtrados[variable_filtro_cat].astype(str).isin(categorias_elegidas)
+        if len(analyzer.numericas) >= 2:
+            controles_variables, controles_metodo = st.columns([1.8, 1], gap="large")
+            with controles_variables:
+                variables_correlacion = multiselect_persistente(
+                    "Variables numéricas a relacionar",
+                    analyzer.numericas,
+                    "eda_correlacion_variables",
+                    [
+                        variable
+                        for variable in (
+                            "age",
+                            "duration",
+                            "emp.var.rate",
+                            "cons.price.idx",
+                            "euribor3m",
+                            "nr.employed",
+                        )
+                        if variable in analyzer.numericas
+                    ],
+                    ayuda="Selecciona entre 2 y 6 columnas para construir el análisis dinámico.",
+                    max_selecciones=6,
+                )
+            with controles_metodo:
+                opciones_metodo = [
+                    "Spearman · relación monotónica",
+                    "Pearson · relación lineal",
                 ]
+                metodo_elegido = selectbox_persistente(
+                    "Método de correlación",
+                    opciones_metodo,
+                    "eda_correlacion_metodo",
+                    opciones_metodo[0],
+                    ayuda=(
+                        "Spearman es más resistente a asimetrías y valores extremos; Pearson mide relaciones lineales."
+                    ),
+                )
+
+            if len(variables_correlacion) < 2:
+                st.info("Selecciona al menos dos variables numéricas para calcular sus relaciones.")
             else:
-                datos_filtrados = datos_filtrados.iloc[0:0]
+                metodo_correlacion = "spearman" if metodo_elegido.startswith("Spearman") else "pearson"
+                variable_foco = selectbox_persistente(
+                    "Variable principal para el ranking",
+                    variables_correlacion,
+                    "eda_correlacion_foco",
+                    "euribor3m" if "euribor3m" in variables_correlacion else variables_correlacion[0],
+                    ayuda="El ranking mostrará cómo se relaciona esta variable con las demás columnas seleccionadas.",
+                )
 
-        excluir_unknown = checkbox_persistente(
-            "Excluir registros con unknown en cualquier variable categórica",
-            "eda_excluir_unknown",
-            False,
-            "Permite medir el efecto de trabajar solo con información categórica conocida.",
-        )
-        if excluir_unknown and not datos_filtrados.empty:
-            mascara_conocidos = pd.Series(True, index=datos_filtrados.index)
-            for variable in analyzer.categoricas:
-                mascara_conocidos &= ~datos_filtrados[variable].astype(str).str.lower().eq("unknown")
-            datos_filtrados = datos_filtrados[mascara_conocidos]
+                matriz_correlacion = analyzer.matriz_correlacion(variables_correlacion, metodo_correlacion)
+                relaciones_foco = matriz_correlacion[variable_foco].drop(labels=[variable_foco]).dropna()
+                positivas = relaciones_foco[relaciones_foco > 0]
+                negativas = relaciones_foco[relaciones_foco < 0]
 
-        k1, k2, k3 = st.columns(3)
-        k1.metric("Registros filtrados", f"{len(datos_filtrados):,}")
-        k2.metric("Retención de la base", f"{len(datos_filtrados) / len(dataframe) * 100:.1f}%")
-        tasa_filtrada = analyzer.tasa_aceptacion(datos_filtrados)
-        k3.metric("Aceptación filtrada", "No disponible" if pd.isna(tasa_filtrada) else f"{tasa_filtrada:.2f}%")
+                metrica_columnas, metrica_metodo, metrica_positiva, metrica_negativa = st.columns(4)
+                metrica_columnas.metric("Variables analizadas", len(variables_correlacion))
+                metrica_metodo.metric(
+                    "Método",
+                    "Spearman" if metodo_correlacion == "spearman" else "Pearson",
+                )
+                if not positivas.empty:
+                    variable_positiva = positivas.idxmax()
+                    metrica_positiva.metric(
+                        "Mayor relación positiva",
+                        variable_positiva,
+                        f"{positivas.loc[variable_positiva]:+.2f}",
+                        delta_color="off",
+                    )
+                else:
+                    metrica_positiva.metric("Mayor relación positiva", "No detectada")
+                if not negativas.empty:
+                    variable_negativa = negativas.idxmin()
+                    metrica_negativa.metric(
+                        "Mayor relación negativa",
+                        variable_negativa,
+                        f"{negativas.loc[variable_negativa]:+.2f}",
+                        delta_color="off",
+                    )
+                else:
+                    metrica_negativa.metric("Mayor relación negativa", "No detectada")
 
-        variables_resumen = multiselect_persistente(
-            "Medidas numéricas del resumen dinámico",
-            analyzer.numericas,
-            "eda_medidas_dinamicas",
-            [variable for variable in ("age", "duration", "campaign") if variable in analyzer.numericas],
-            max_selecciones=5,
-        )
-        if not datos_filtrados.empty and variables_resumen:
-            resumen_dinamico = datos_filtrados[variables_resumen].agg(["count", "mean", "median", "std", "min", "max"]).T
-            st.dataframe(resumen_dinamico.round(2), width="stretch")
-        mostrar_registros = checkbox_persistente("Mostrar registros filtrados", "eda_mostrar_filtrados", False)
-        if mostrar_registros:
-            st.dataframe(datos_filtrados.head(200), width="stretch", hide_index=True)
+                mapa_calor, ranking_relaciones = st.columns([1.25, 1], gap="large")
+                with mapa_calor:
+                    mostrar_figura(
+                        analyzer.figura_matriz_correlacion(matriz_correlacion, metodo_correlacion)
+                    )
+                with ranking_relaciones:
+                    mostrar_figura(
+                        analyzer.figura_ranking_correlaciones(matriz_correlacion, variable_foco)
+                    )
+
+                if not relaciones_foco.empty:
+                    variable_intensa = relaciones_foco.abs().idxmax()
+                    coeficiente_intenso = float(relaciones_foco.loc[variable_intensa])
+                    magnitud = abs(coeficiente_intenso)
+                    intensidad = (
+                        "muy débil"
+                        if magnitud < 0.20
+                        else "débil"
+                        if magnitud < 0.40
+                        else "moderada"
+                        if magnitud < 0.60
+                        else "fuerte"
+                        if magnitud < 0.80
+                        else "muy fuerte"
+                    )
+                    direccion = "positiva" if coeficiente_intenso > 0 else "negativa"
+                    simbolo = "ρ" if metodo_correlacion == "spearman" else "r"
+                    bloque_insight(
+                        f"Conclusión dinámica: la relación más intensa de {variable_foco} se observa con "
+                        f"{variable_intensa}; es {direccion} y {intensidad} ({simbolo} = {coeficiente_intenso:.2f}). "
+                        "El coeficiente describe asociación entre las variables seleccionadas, no causalidad."
+                    )
+                else:
+                    st.warning("No fue posible calcular relaciones válidas para la variable principal seleccionada.")
+        else:
+            st.warning("Se requieren al menos dos variables numéricas para construir el explorador.")
 
         st.markdown("---")
         titulo_item(10, "Hallazgos clave", "Visualización resumen e insights principales derivados del EDA.")
